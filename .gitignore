@@ -1,0 +1,10 @@
+# SwiftPM build artifacts
+.build/
+.swiftpm/
+
+# Per-developer mise overrides (toolchain paths, env)
+mise.local.toml
+**/mise.local.toml
+
+# macOS
+.DS_Store

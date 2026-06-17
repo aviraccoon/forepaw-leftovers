@@ -1,0 +1,32 @@
+# contrast-pairs build/run tasks.
+#
+# If `swift build` fails with an SDK/compiler mismatch, your local Swift
+# toolchain may need SDKROOT/DEVELOPER_DIR set explicitly. Put that in a
+# gitignored mise.local.toml at the repo root:
+#
+#   [env]
+#   SDKROOT = ""
+#   DEVELOPER_DIR = "/path/to/Xcode.app/Contents/Developer"
+
+[tasks.build]
+description = "Build the contrast-pairs app"
+run = "swift build"
+sources = ["Sources/**/*.swift", "Package.swift"]
+outputs = [".build/debug/ContrastPairs"]
+
+[tasks.bundle]
+description = "Bundle the built binary as a .app (required for app activation)"
+depends = ["build"]
+run = [
+    "mkdir -p .build/ContrastPairs.app/Contents/MacOS",
+    "cp .build/debug/ContrastPairs .build/ContrastPairs.app/Contents/MacOS/ContrastPairs",
+]
+
+[tasks.run]
+description = "Build, bundle, and launch the app (override seed via CONTRAST_SEED)"
+depends = ["bundle"]
+run = "open .build/ContrastPairs.app"
+env = { CONTRAST_SEED = "1" }
+
+[tasks.clean]
+run = "swift package clean"

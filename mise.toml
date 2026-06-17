@@ -1,0 +1,12 @@
+# Root config for forepaw-leftovers.
+#
+# Monorepo mode: each test app under this repo has its own mise.toml with its
+# own build/run tasks. Run any app's task from the root, e.g.
+#   mise //contrast-pairs:build
+#   mise //contrast-pairs:run
+# Override the Swift toolchain locally via mise.local.toml (not committed).
+
+monorepo_root = true
+
+[monorepo]
+config_roots = ["contrast-pairs"]
