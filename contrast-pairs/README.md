@@ -55,13 +55,31 @@ activated by `NSRunningApplication.activate()`.
 ## Layout
 
 - Header (always black-on-white): app name + `seed = N`.
-- One row per sample: a small black-on-white ground-truth label above a colored
-  block containing the sample text in its fg color on its bg color.
-- Each row has `accessibilityIdentifier("sample-N")` and an `accessibilityLabel`
-  encoding `id=N fg=#rrggbb bg=#rrggbb ratio=X.XX:1`.
+- Three-column layout, all visible without scrolling at default window size:
 
-The color generation is biased toward realistic UI backgrounds (white, light
-grays, dark surfaces) and a spread of foregrounds (grays across the full
-luminance range plus some saturated colors), so the seed produces a mix of
-passing and failing pairs rather than uniformly high-contrast noise. A good
-trash pile has variety.
+### Column 1: Random samples (seed-driven)
+
+One row per sample: a small black-on-white ground-truth label above a colored
+block containing the sample text in its fg color on its bg color.
+
+### Column 2: Small elements
+
+Same fg/bg pair (#333 on #eee, ~10.9:1) at font sizes 10, 12, 14, 16, 18, 20,
+24, 30px. Heights are ~fontSize+10px (minimal padding), matching Finder's
+column-view textfields. If the sampler gets <4.5:1 on these, it's a measurement
+failure — the colors clearly pass.
+
+### Column 3: Parent-child bounds + Vibrancy
+
+**Parent-child**: Text "Sample text" at 13px inside a container. The container
+has the background color; the text has no explicit background (inherits from
+parent). Container heights: 18, 20, 23, 28, 36, 48px. This mimics Finder's
+column view where the textfield is just the text rendering area and the parent
+group paints the background.
+
+**Vibrancy**: Text on a subtle gradient background (#f0f0f0 to #e8e8e8) that
+creates ~10-15 quantized buckets, similar to macOS sidebar vibrancy. Tests the
+diffuse threshold.
+
+All three columns have `accessibilityIdentifier` and `accessibilityLabel`
+carrying the ground-truth answer key, matching the original sample pattern.

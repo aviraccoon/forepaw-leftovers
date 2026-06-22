@@ -113,6 +113,23 @@ func samples(seed: UInt64, count: Int) -> [ContrastSample] {
     }
 }
 
+/// Fixed color pair for the small-elements section: a moderate-contrast pair
+/// that clearly passes 4.5:1 (black on white = 21:1) so any measurement
+/// failure is the sampler's fault, not the colors.
+private let smallElementFG = RGB(r: 0x33, g: 0x33, b: 0x33)  // #333
+private let smallElementBG = RGB(r: 0xEE, g: 0xEE, b: 0xEE)  // #eee
+private let smallElementRatio = contrastRatio(smallElementFG, smallElementBG)
+
+/// Font sizes that exercise the small-element boundary. Finder's column-view
+/// textfields are 18px tall; sidebar statictext is ~18-21px. The sizes below
+/// 24px are the danger zone where pixel sampling struggles.
+private let smallElementSizes: [Double] = [10, 12, 14, 16, 18, 20, 24, 30]
+
+/// Container heights for the parent-child section. The text is always 13px
+/// (like Finder sidebar); the container varies. When the container is small,
+/// the text fills most of the rect and bg detection fails.
+private let parentChildContainerHeights: [Double] = [18, 20, 23, 28, 36, 48]
+
 // MARK: - App
 
 @main
@@ -127,7 +144,7 @@ struct ContrastPairsApp: App {
         WindowGroup {
             ContentView()
         }
-        .defaultSize(width: 760, height: 720)
+        .defaultSize(width: 1100, height: 850)
     }
 }
 
@@ -163,10 +180,45 @@ struct ContentView: View {
 
             Divider()
 
+            // Three-column layout: original pairs | small elements | parent-child + vibrancy
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(allSamples) { sample in
-                        SampleRow(sample: sample)
+                HStack(alignment: .top, spacing: 16) {
+                    // Column 1: original random samples
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        ForEach(allSamples) { sample in
+                            SampleRow(sample: sample)
+                        }
+                    }
+
+                    // Column 2: small elements
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        SectionDivider(title: "small elements",
+                                       note: "fg=\(smallElementFG.hex) bg=\(smallElementBG.hex) ratio=\(String(format: "%.1f", smallElementRatio)):1")
+
+                        ForEach(smallElementSizes, id: \.self) { size in
+                            SmallElementRow(fontSize: size,
+                                            fg: smallElementFG, bg: smallElementBG,
+                                            ratio: smallElementRatio)
+                        }
+                    }
+
+                    // Column 3: parent-child + vibrancy
+                    VStack(alignment: .leading, spacing: 6) {
+                        SectionDivider(title: "parent-child bounds",
+                                       note: "text 13px, container h varies")
+
+                        ForEach(parentChildContainerHeights, id: \.self) { h in
+                            ParentChildRow(containerHeight: h,
+                                           fg: smallElementFG, bg: smallElementBG,
+                                           ratio: smallElementRatio)
+                        }
+
+                        SectionDivider(title: "vibrancy-like bg",
+                                       note: "subtle gradient, 13px")
+
+                        VibrancyRow(text: "Sidebar item", fg: smallElementFG)
+                        VibrancyRow(text: "Favorites", fg: RGB(r: 0x55, g: 0x55, b: 0x55))
+                        VibrancyRow(text: "Locations", fg: RGB(r: 0x88, g: 0x88, b: 0x88))
                     }
                 }
                 .padding(12)
@@ -175,6 +227,30 @@ struct ContentView: View {
         .background(Color.black.opacity(0.05))
     }
 }
+
+// MARK: - Section divider
+
+struct SectionDivider: View {
+    let title: String
+    let note: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Divider()
+            HStack {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Text(note)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.top, 8)
+    }
+}
+
+// MARK: - Original sample row
 
 struct SampleRow: View {
     let sample: ContrastSample
@@ -205,6 +281,170 @@ struct SampleRow: View {
                 .background(sample.bg.color)
                 .accessibilityIdentifier("sample-\(sample.id)")
                 .accessibilityLabel("\(sample.text) — fg=\(sample.fg.hex) bg=\(sample.bg.hex)")
+        }
+        .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.gray.opacity(0.3)))
+    }
+}
+
+// MARK: - Small element row
+
+/// A text sample at a specific font size, testing whether the sampler can
+/// recover colors from tiny rects. The text is always the same fg/bg pair;
+/// only the height varies.
+struct SmallElementRow: View {
+    let fontSize: Double
+    let fg: RGB
+    let bg: RGB
+    let ratio: Double
+
+    private var label: String {
+        String(format: "small-%02.0f  fg=%@  bg=%@  ratio=%.2f:1  h≈%02.0fpx",
+               fontSize, fg.hex, bg.hex, ratio, fontSize + 10)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Ground-truth label
+            Text(label)
+                .font(.system(size: 10, design: .monospaced))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.white)
+                .foregroundColor(.black)
+                .accessibilityIdentifier("small-\(Int(fontSize))-label")
+                .accessibilityLabel(label)
+
+            // The sample: text on colored bg, with padding that makes the
+            // total height ≈ fontSize + 10 (2px top+bottom padding + ascender/
+            // descender room). This matches the real-world pattern where
+            // textfields have minimal vertical padding.
+            Text("Sample text")
+                .font(.system(size: fontSize))
+                .foregroundColor(fg.color)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(bg.color)
+                .accessibilityIdentifier("small-\(Int(fontSize))")
+                .accessibilityLabel("Sample text — fg=\(fg.hex) bg=\(bg.hex)")
+        }
+        .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.gray.opacity(0.3)))
+    }
+}
+
+// MARK: - Parent-child row
+
+/// A text sample inside a container. The container has the background color;
+/// the text has no explicit background (inherits from parent). This mimics
+/// Finder's column view where the textfield is just the text rendering area
+/// and the parent group paints the background.
+///
+/// The AX tree should show:
+///   group (container, h=containerHeight, bg=#eee)
+///     statictext (text, h≈18px, fg=#333, no explicit bg)
+struct ParentChildRow: View {
+    let containerHeight: Double
+    let fg: RGB
+    let bg: RGB
+    let ratio: Double
+
+    private var label: String {
+        String(format: "parent-h%02.0f  fg=%@  bg=%@  ratio=%.2f:1",
+               containerHeight, fg.hex, bg.hex, ratio)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Ground-truth label
+            Text(label)
+                .font(.system(size: 10, design: .monospaced))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.white)
+                .foregroundColor(.black)
+                .accessibilityIdentifier("parent-\(Int(containerHeight))-label")
+                .accessibilityLabel(label)
+
+            // Container with background; text inside has no explicit bg.
+            // DO NOT use .accessibilityElement() here — we want the container
+            // and text to be separate AX elements so the sampler sees the
+            // parent-child bounds relationship.
+            //
+            // The fixed frame on the container prevents SwiftUI's LazyVStack
+            // from collapsing it when off-screen.
+            HStack {
+                Text("Sample text")
+                    .font(.system(size: 13))
+                    .foregroundColor(fg.color)
+                    // NO .background() — inherits from parent
+                Spacer()
+            }
+            .frame(height: containerHeight)
+            .frame(maxWidth: .infinity)
+            .background(bg.color)
+            .accessibilityIdentifier("parent-\(Int(containerHeight))")
+            .accessibilityLabel("Sample text — fg=\(fg.hex) bg=\(bg.hex)")
+        }
+        .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.gray.opacity(0.3)))
+    }
+}
+
+// MARK: - Vibrancy row
+
+/// A text sample on a subtle gradient background that mimics macOS vibrancy.
+/// The gradient creates ~10-15 quantized buckets (similar to a vibrancy blur),
+/// which the sampler might misclassify as "diffuse" and skip.
+///
+/// The gradient is horizontal, going from #f0f0f0 to #e8e8e8 — a very subtle
+/// light-gray shift that's barely perceptible but creates enough color spread
+/// to exercise the diffuse threshold.
+struct VibrancyRow: View {
+    let text: String
+    let fg: RGB
+
+    private var bgStart: RGB { RGB(r: 0xF0, g: 0xF0, b: 0xF0) }  // #f0f0f0
+    private var bgEnd: RGB { RGB(r: 0xE8, g: 0xE8, b: 0xE8) }    // #e8e8e8
+
+    /// Use the midpoint for the ground-truth ratio label.
+    private var bgMid: RGB { RGB(r: 0xEC, g: 0xEC, b: 0xEC) }    // #ecec
+    private var ratio: Double { contrastRatio(fg, bgMid) }
+
+    private var label: String {
+        String(format: "vib-\(text)  fg=%@  bg≈%@  ratio≈%.2f:1  gradient=#f0f0f0→#e8e8e8",
+               fg.hex, bgMid.hex, ratio)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Ground-truth label
+            Text(label)
+                .font(.system(size: 10, design: .monospaced))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.white)
+                .foregroundColor(.black)
+                .accessibilityIdentifier("vib-\(text)-label")
+                .accessibilityLabel(label)
+
+            // Text on gradient background
+            Text(text)
+                .font(.system(size: 13))
+                .foregroundColor(fg.color)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            bgStart.color,
+                            bgEnd.color,
+                        ]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .accessibilityIdentifier("vib-\(text)")
+                .accessibilityLabel("\(text) — fg=\(fg.hex) bg=gradient")
         }
         .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color.gray.opacity(0.3)))
     }
